@@ -1,0 +1,6 @@
+{
+  "name": "المنصورية تجمعنا",
+  "description": "دليل المنصورية الشامل للمطاعم والمستشفيات والمحلات والفنيين، وساحة تواصل اجتماعي لطلب الخدمات والمنتجات.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
