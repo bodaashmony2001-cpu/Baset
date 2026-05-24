@@ -7,7 +7,10 @@ import com.example.data.database.AppDatabase
 import com.example.data.model.*
 import com.example.data.repository.AppRepository
 import com.example.data.repository.ChatPreview
+import com.example.data.api.AppApi
+import com.example.data.api.AppConfig
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -93,10 +96,36 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // Application Config State (Customizable App Images by Admin)
+    private val _appConfig = MutableStateFlow(AppConfig())
+    val appConfig = _appConfig.asStateFlow()
+
+    // Flag for Admin Mode
+    private val _isAdminModeEnabled = MutableStateFlow(false)
+    val isAdminModeEnabled = _isAdminModeEnabled.asStateFlow()
+
     init {
-        // Run database prepopulate in a coroutine on start
+        // Run database prepopulate (will be empty)
         viewModelScope.launch {
             repository.prepopulateIfNeeded()
+        }
+
+        // Active background server synchronization loop (delivers real-time collaborative updates)
+        viewModelScope.launch {
+            while (true) {
+                try {
+                    repository.syncWithServer()
+                    
+                    // Pull updated App Logos config from server if available
+                    val config = AppApi.instance.getAppConfig()
+                    if (config != null) {
+                        _appConfig.value = config
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+                delay(4000) // Sync every 4 seconds
+            }
         }
     }
 
@@ -104,12 +133,57 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun handleLogin(phone: String, name: String) {
         viewModelScope.launch {
             repository.login(phone, name)
+            // If the user logs in as Admin phone or starts Admin
+            if (phone == "01000000000") {
+                _isAdminModeEnabled.value = true
+            }
         }
     }
 
     fun handleLogout() {
         viewModelScope.launch {
             repository.logout()
+            _isAdminModeEnabled.value = false
+        }
+    }
+
+    fun toggleAdminMode(enabled: Boolean) {
+        _isAdminModeEnabled.value = enabled
+    }
+
+    // UPDATE CURRENT USER DETAILS
+    fun updateCurrentUserName(newName: String) {
+        viewModelScope.launch {
+            val user = currentUser.value ?: return@launch
+            val updatedUser = user.copy(name = newName)
+            repository.login(updatedUser.phoneNumber, updatedUser.name)
+        }
+    }
+
+    // UPDATE APP CONFIG (ADMIN ACTIONS)
+    fun updateAppConfig(
+        outerUrl: String,
+        innerUrl: String,
+        c1Name: String,
+        c1Photo: String,
+        c2Name: String,
+        c2Photo: String
+    ) {
+        viewModelScope.launch {
+            val updated = AppConfig(
+                outerLogoUrl = outerUrl,
+                innerLogoUrl = innerUrl,
+                creator1Name = c1Name,
+                creator1Photo = c1Photo,
+                creator2Name = c2Name,
+                creator2Photo = c2Photo
+            )
+            _appConfig.value = updated
+            try {
+                AppApi.instance.uploadAppConfig(updated)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 
@@ -122,7 +196,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _selectedCategory.value = category
     }
 
-    // ADD PROFILE
+    // ADD / UPDATE PROFILE
     fun createProfile(
         category: String,
         name: String,
@@ -147,6 +221,35 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 ownerPhone = creatorPhone
             )
             repository.insertProfile(newProfile)
+        }
+    }
+
+    fun updateProfile(
+        id: Int,
+        category: String,
+        name: String,
+        title: String,
+        description: String,
+        phoneNumber: String,
+        mapsLink: String,
+        logoUri: String,
+        extraImages: String
+    ) {
+        viewModelScope.launch {
+            val creatorPhone = currentUser.value?.phoneNumber ?: ""
+            val updatedProfile = Profile(
+                id = id,
+                category = category,
+                name = name,
+                title = title,
+                description = description,
+                phoneNumber = phoneNumber,
+                mapsLink = mapsLink,
+                logoUri = logoUri,
+                extraImages = extraImages,
+                ownerPhone = creatorPhone
+            )
+            repository.insertProfile(updatedProfile)
         }
     }
 

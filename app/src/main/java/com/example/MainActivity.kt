@@ -70,6 +70,16 @@ class MainActivity : ComponentActivity() {
                                     }
                                 )
                             }
+                            composable("edit_profile/{profileId}") { backStackEntry ->
+                                val profileId = backStackEntry.arguments?.getString("profileId")?.toIntOrNull() ?: 0
+                                EditProfileScreen(
+                                    profileId = profileId,
+                                    viewModel = viewModel,
+                                    onNavigateBack = {
+                                        navController.popBackStack()
+                                    }
+                                )
+                            }
                             composable("chat_room") {
                                 ChatRoomScreen(
                                     viewModel = viewModel,
